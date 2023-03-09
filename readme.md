@@ -1,4 +1,5 @@
 # RunPE (x86/32-bit only)
+For educational purposes only. Not intented for use.
 
 Usage: 
 ```c#
@@ -6,6 +7,9 @@ RunPE.Run("C:\\windows\\syswow64\\calc.exe", File.ReadAllBytes("putty.exe"));
 ```
 
 For a 64-bit version see: https://github.com/gigajew/Mandark
+
+# Problems
+Sometimes the program crashes with error code 0xc0000005 and I can only assume it's because of Windows DEP. Not aware of any workarounds as of this date.
 
 # AMSI Disable patch (by Rasta Mouse)
 ```c#
